@@ -12,17 +12,6 @@ struct Element
 }
 
 
-// parser which can parse just the letter 'a'
-fn the_letter_a(input: &str) -> Result<(&str, ()), &str>
-{
-    match input.chars().next()
-    {
-        Some('a') => Ok((&input['a'.len_utf8()..], ())),
-        _ => Err(input),
-    }
-}
-
-
 /*
  * match a literal
  */
@@ -103,6 +92,15 @@ fn identifier_parser()
 }
 
 
+// parser which can parse just the letter 'a'
+fn the_letter_a(input: &str) -> Result<(&str, ()), &str>
+{
+    match input.chars().next()
+    {
+        Some('a') => Ok((&input['a'.len_utf8()..], ())),
+        _ => Err(input),
+    }
+}
 
 fn main()
 {
