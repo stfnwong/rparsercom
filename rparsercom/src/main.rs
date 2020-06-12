@@ -11,6 +11,12 @@ struct Element
     children: Vec<Element>
 }
 
+// Make a trait for the parse result 
+type ParseResult<'a, Output> = Result<(&'a str, Output), &'a str>;
+
+trait Parser<'a, Output> {
+    fn parse(&self, input: &'a str) ->  ParseResult<'a, Output>;
+}
 
 /*
  * match a literal
@@ -121,6 +127,20 @@ fn pair_combinator()
 
     assert_eq!(Err("oops"), tag_opener("oops"));
     assert_eq!(Err("!oops"), tag_opener("<!oops"))
+}
+
+// Map combinator 
+// We use this to change the type of the result
+// This is kind of like the rust equivalent of a functor
+fn map<P, F, A, B>(parser: P, map_fn: F) -> impl Fn(&str) -> Result<(&str, B), &str>
+    where 
+    P: Fn(&str) -> Result<(&str, A), &str>,
+    F: Fn(A) -> B,
+{
+    move |input| match parser(input) {
+        Ok((next_input, result)) => Ok((next_input, map_fn(result))),
+        Err(err) => Err(err),
+    }
 }
 
 
