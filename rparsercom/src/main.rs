@@ -18,6 +18,17 @@ trait Parser<'a, Output> {
     fn parse(&self, input: &'a str) ->  ParseResult<'a, Output>;
 }
 
+// I also need this? (Need to read rust docs...)
+impl<'a, F, Output> Parser<'a, Output> for F
+where
+    F: Fn(&'a str) -> ParseResult<Output>
+{
+    fn parse(&self, input: &'a str) -> ParseResult<'a, Output>
+    {
+        self(input)
+    }
+}
+
 /*
  * match a literal
  */
@@ -132,15 +143,14 @@ fn pair_combinator()
 // Map combinator 
 // We use this to change the type of the result
 // This is kind of like the rust equivalent of a functor
-fn map<P, F, A, B>(parser: P, map_fn: F) -> impl Fn(&str) -> Result<(&str, B), &str>
-    where 
-    P: Fn(&str) -> Result<(&str, A), &str>,
+fn map<'a, P, F, A, B>(parser: P, map_fn: F) ->impl Parser<'a, B>
+where
+    P: Parser<'a, A>,
     F: Fn(A) -> B,
 {
-    move |input| match parser(input) {
-        Ok((next_input, result)) => Ok((next_input, map_fn(result))),
-        Err(err) => Err(err),
-    }
+    move |input| 
+        parser.parse(input)
+        .map(|(next_input, result)| (next_input, map_fn(result)))
 }
 
 
