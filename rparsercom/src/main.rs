@@ -18,7 +18,8 @@ trait Parser<'a, Output> {
     fn parse(&self, input: &'a str) ->  ParseResult<'a, Output>;
 }
 
-// I also need this? (Need to read rust docs...)
+// Implement this trait for any function that matches the
+// signature of a parser
 impl<'a, F, Output> Parser<'a, Output> for F
 where
     F: Fn(&'a str) -> ParseResult<Output>
@@ -110,19 +111,27 @@ fn identifier_parser()
 
 // combinator parser for a pair
 // this takes two parsers and combines them into a single parser
-fn pair<P1, P2, R1, R2>(parser1: P1, parser2: P2) -> impl Fn(&str) -> Result<(&str, (R1, R2)), &str>
-    where
-    P1: Fn(&str) -> Result<(&str, R1), &str>,
-    P2: Fn(&str) -> Result<(&str, R2), &str>,
+fn pair<'a, P1, P2, R1, R2>(parser1: P1, parser2: P2) -> impl Parser<'a, (R1, R2)>
+where
+    P1: Parser<'a, R1>,
+    P2: Parser<'a, R2>,
 {
-    move |input| match parser1(input)
+    // NOTE: where does next_input, last_input actually come from?
+    move |input| match parser1.parse(input)
     {
-        Ok((next_input, result1)) => match parser2(next_input) {
+        Ok((next_input, result1)) => match parser2.parse(next_input)
+        {
             Ok((final_input, result2)) => Ok((final_input, (result1, result2))),
             Err(err) => Err(err),
         },
         Err(err) => Err(err),
     }
+    //move |input| {
+    //    parser1.parse(input).and_then(|(next_input, result1)| { 
+    //        parser2.parse(next_input)
+    //            .map(|(last_input, result2)| (last_input, (result1, result2)))
+    //    })
+    //}
 }
 
 #[test]
@@ -137,7 +146,7 @@ fn pair_combinator()
     );
 
     assert_eq!(Err("oops"), tag_opener("oops"));
-    assert_eq!(Err("!oops"), tag_opener("<!oops"))
+    assert_eq!(Err("!oops"), tag_opener("<!oops"));
 }
 
 // Map combinator 
