@@ -22,7 +22,7 @@ trait Parser<'a, Output> {
 // signature of a parser
 impl<'a, F, Output> Parser<'a, Output> for F
 where
-    F: Fn(&'a str) -> ParseResult<Output>
+    F: Fn(&'a str) -> ParseResult<Output>,
 {
     fn parse(&self, input: &'a str) -> ParseResult<'a, Output>
     {
@@ -116,22 +116,13 @@ where
     P1: Parser<'a, R1>,
     P2: Parser<'a, R2>,
 {
-    // NOTE: where does next_input, last_input actually come from?
-    move |input| match parser1.parse(input)
+    move |input| 
     {
-        Ok((next_input, result1)) => match parser2.parse(next_input)
+        parser1.parse(input).and_then(|(next_input, result1)|
         {
-            Ok((final_input, result2)) => Ok((final_input, (result1, result2))),
-            Err(err) => Err(err),
-        },
-        Err(err) => Err(err),
+            parser2.parse(next_input).map(|(last_input, result2)| (last_input, (result1, result2)))
+        })
     }
-    //move |input| {
-    //    parser1.parse(input).and_then(|(next_input, result1)| { 
-    //        parser2.parse(next_input)
-    //            .map(|(last_input, result2)| (last_input, (result1, result2)))
-    //    })
-    //}
 }
 
 #[test]
@@ -142,17 +133,17 @@ fn pair_combinator()
 
     assert_eq!(
         Ok(("/>", ((), "my-first-element".to_string()))),
-        tag_opener("<my-first-element/>")
+        tag_opener.parse("<my-first-element/>")
     );
 
-    assert_eq!(Err("oops"), tag_opener("oops"));
-    assert_eq!(Err("!oops"), tag_opener("<!oops"));
+    assert_eq!(Err("oops"), tag_opener.parse("oops"));
+    assert_eq!(Err("!oops"), tag_opener.parse("<!oops"));
 }
 
 // Map combinator 
 // We use this to change the type of the result
 // This is kind of like the rust equivalent of a functor
-fn map<'a, P, F, A, B>(parser: P, map_fn: F) ->impl Parser<'a, B>
+fn map<'a, P, F, A, B>(parser: P, map_fn: F) -> impl Parser<'a, B>
 where
     P: Parser<'a, A>,
     F: Fn(A) -> B,
