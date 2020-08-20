@@ -30,42 +30,53 @@ where
     }
 }
 
+
+/*
+ * left combinator
+ */
+fn left<'a, P1, P2, R1, R2>(parser1: P1, parser2: P2) -> impl Parser<'a, R1>
+where
+    P1: Parser<'a, R1>,
+    P2: Parser<'a, R2>,
+{
+    return map(pair(parser1, parser2), |(left, _right)| left);
+}
+
+/*
+ * right combinator
+ */
+fn right<'a, P1, P2, R1, R2>(parser1: P1, parser2: P2) -> impl Parser<'a, R2>
+where
+    P1: Parser<'a, R1>,
+    P2: Parser<'a, R2>,
+{
+    return map(pair(parser1, parser2), |(_left, right)| right);
+}
+
 /*
  * match a literal
  */
-fn match_literal(expected: &'static str) -> impl Fn(&str) -> Result<(&str, ()), &str>
+fn match_literal<'a>(expected: &'static str) -> impl Parser<'a, ()>
 {
-    move |input| match input.get(0..expected.len())
+    move |input: &'a str| match input.get(0..expected.len()) 
     {
-        Some(next) if next == expected => {
-            Ok((&input[expected.len()..], ()))
-        }
-        _ => Err(input)
+        Some(next) if next == expected => Ok((&input[expected.len()..], ())),
+        _ => Err(input),
     }
-}
 
-#[test]
-fn literal_parser() 
-{
-    let parse_joe = match_literal("Hello Joe!");
-
-    assert_eq!( Ok(("", ())), parse_joe("Hello Joe!") );
-
-    assert_eq!(
-        Ok((" Hello Robert!", ())),         // consume "Hello Joe!", leaving "Hello Robert"
-        parse_joe("Hello Joe! Hello Robert!")
-    );
-    
-    assert_eq!(
-        Err("Hello Mike!"),
-        parse_joe("Hello Mike!")
-    );
+    //move |input| match input.get(0..expected.len())
+    //{
+    //    Some(next) if next == expected => {
+    //        Ok((&input[expected.len()..], ()))
+    //    }
+    //    _ => Err(input)
+    //}
 }
 
 /*
  * match an identifier
  */
-fn identifier(input: &str) -> Result<(&str, String), &str> 
+fn identifier(input: &str) -> ParseResult<String>
 {
     let mut matched = String::new();
     let mut chars = input.chars();
@@ -90,6 +101,39 @@ fn identifier(input: &str) -> Result<(&str, String), &str>
     return Ok((&input[next_index..], matched));
 }
 
+
+// combinator parser for a pair
+// this takes two parsers and combines them into a single parser
+fn pair<'a, P1, P2, R1, R2>(parser1: P1, parser2: P2) -> impl Parser<'a, (R1, R2)>
+where
+    P1: Parser<'a, R1>,
+    P2: Parser<'a, R2>,
+{
+    move |input| 
+    {
+        parser1.parse(input).and_then(|(next_input, result1)|
+        {
+            parser2.parse(next_input).map(|(last_input, result2)| (last_input, (result1, result2)))
+        })
+    }
+}
+
+// Map combinator 
+// We use this to change the type of the result
+// This is kind of like the rust equivalent of a functor
+fn map<'a, P, F, A, B>(parser: P, map_fn: F) -> impl Parser<'a, B>
+where
+    P: Parser<'a, A>,
+    F: Fn(A) -> B,
+{
+    move |input| 
+        parser.parse(input)
+        .map(|(next_input, result)| (next_input, map_fn(result)))
+}
+
+
+// ================ TESTS ================ //
+
 #[test]
 fn identifier_parser() 
 {
@@ -109,20 +153,23 @@ fn identifier_parser()
     );
 }
 
-// combinator parser for a pair
-// this takes two parsers and combines them into a single parser
-fn pair<'a, P1, P2, R1, R2>(parser1: P1, parser2: P2) -> impl Parser<'a, (R1, R2)>
-where
-    P1: Parser<'a, R1>,
-    P2: Parser<'a, R2>,
+
+#[test]
+fn literal_parser() 
 {
-    move |input| 
-    {
-        parser1.parse(input).and_then(|(next_input, result1)|
-        {
-            parser2.parse(next_input).map(|(last_input, result2)| (last_input, (result1, result2)))
-        })
-    }
+    let parse_joe = match_literal("Hello Joe!");
+
+    assert_eq!( Ok(("", ())), parse_joe.parse("Hello Joe!") );
+
+    assert_eq!(
+        Ok((" Hello Robert!", ())),         // consume "Hello Joe!", leaving "Hello Robert"
+        parse_joe.parse("Hello Joe! Hello Robert!")
+    );
+    
+    assert_eq!(
+        Err("Hello Mike!"),
+        parse_joe.parse("Hello Mike!")
+    );
 }
 
 #[test]
@@ -140,18 +187,6 @@ fn pair_combinator()
     assert_eq!(Err("!oops"), tag_opener.parse("<!oops"));
 }
 
-// Map combinator 
-// We use this to change the type of the result
-// This is kind of like the rust equivalent of a functor
-fn map<'a, P, F, A, B>(parser: P, map_fn: F) -> impl Parser<'a, B>
-where
-    P: Parser<'a, A>,
-    F: Fn(A) -> B,
-{
-    move |input| 
-        parser.parse(input)
-        .map(|(next_input, result)| (next_input, map_fn(result)))
-}
 
 
 // parser which can parse just the letter 'a'
