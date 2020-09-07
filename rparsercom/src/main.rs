@@ -26,32 +26,10 @@ where
 {
     fn parse(&self, input: &'a str) -> ParseResult<'a, Output>
     {
-        self(input)
+        return self(input);
     }
 }
 
-
-/*
- * left combinator
- */
-fn left<'a, P1, P2, R1, R2>(parser1: P1, parser2: P2) -> impl Parser<'a, R1>
-where
-    P1: Parser<'a, R1>,
-    P2: Parser<'a, R2>,
-{
-    return map(pair(parser1, parser2), |(left, _right)| left);
-}
-
-/*
- * right combinator
- */
-fn right<'a, P1, P2, R1, R2>(parser1: P1, parser2: P2) -> impl Parser<'a, R2>
-where
-    P1: Parser<'a, R1>,
-    P2: Parser<'a, R2>,
-{
-    return map(pair(parser1, parser2), |(_left, right)| right);
-}
 
 /*
  * match a literal
@@ -63,14 +41,6 @@ fn match_literal<'a>(expected: &'static str) -> impl Parser<'a, ()>
         Some(next) if next == expected => Ok((&input[expected.len()..], ())),
         _ => Err(input),
     }
-
-    //move |input| match input.get(0..expected.len())
-    //{
-    //    Some(next) if next == expected => {
-    //        Ok((&input[expected.len()..], ()))
-    //    }
-    //    _ => Err(input)
-    //}
 }
 
 /*
@@ -131,6 +101,28 @@ where
         .map(|(next_input, result)| (next_input, map_fn(result)))
 }
 
+/*
+ * left combinator
+ */
+fn left<'a, P1, P2, R1, R2>(parser1: P1, parser2: P2) -> impl Parser<'a, R1>
+where
+    P1: Parser<'a, R1>,
+    P2: Parser<'a, R2>,
+{
+    return map(pair(parser1, parser2), |(left, _right)| left);
+}
+
+/*
+ * right combinator
+ */
+fn right<'a, P1, P2, R1, R2>(parser1: P1, parser2: P2) -> impl Parser<'a, R2>
+where
+    P1: Parser<'a, R1>,
+    P2: Parser<'a, R2>,
+{
+    return map(pair(parser1, parser2), |(_left, right)| right);
+}
+
 // One-or-more  (.) combinator
 fn one_or_more<'a, P, A>(parser: P) -> impl Parser<'a, Vec<A>>
 where
@@ -165,7 +157,6 @@ fn zero_or_more<'a, P, A>(parser: P) -> impl Parser<'a, Vec<A>>
 where
     P: Parser<'a, A>
 {
-
     move |mut input|
     {
         let mut result = Vec::new();
@@ -180,10 +171,81 @@ where
     }
 }
 
+/*
+ * parse any character
+ */
+fn any_char(input: &str) -> ParseResult<char>
+{
+    match input.chars().next() 
+    {
+        Some(next) => Ok((&input[next.len_utf8()..], next)),
+        _ => Err(input),
+    }
+}
+
+/*
+ * parse and call a predicate function
+ */
+fn pred<'a, P, A, F>(parser: P, predicate: F) -> impl Parser<'a, A>
+where
+    P: Parser<'a, A>,
+    F: Fn(&A) -> bool,
+{
+    move |input| {
+        if let Ok((next_input, value)) = parser.parse(input) 
+        {
+            if predicate(&value)
+            {
+                return Ok((next_input, value));
+            }
+        }
+        return Err(input);
+    }
+}
+
+/*
+ * parse any whitespace
+ */
+fn whitespace_char<'a>() -> impl Parser<'a, char>
+{
+    return pred(any_char, |c| c.is_whitespace());
+}
+
+/*
+ * parse zero or more/one or more whitespace 
+ */
+fn one_or_more_space<'a>() -> impl Parser<'a, Vec<char>>
+{
+    return one_or_more(whitespace_char());
+}
+
+fn zero_or_more_space<'a>() -> impl Parser<'a, Vec<char>>
+{
+    return zero_or_more(whitespace_char());
+}
+
+/*
+ * parse a quoted string
+ */
+fn quoted_string<'a>() -> impl Parser<'a, String>
+{
+    map(
+        right(
+            match_literal("\""),
+            left(
+                zero_or_more(pred(any_char, |c| *c != '"')),
+                match_literal("\""),
+            ),
+        ),
+        |chars| chars.into_iter().collect(),
+    )
+}
+
+
 // ================ TESTS ================ //
 
 #[test]
-fn identifier_parser() 
+fn test_identifier_parser() 
 {
     assert_eq!(
         Ok(("", "i-am-an-identifier".to_string())),
@@ -203,7 +265,7 @@ fn identifier_parser()
 
 
 #[test]
-fn literal_parser() 
+fn test_literal_parser() 
 {
     let parse_joe = match_literal("Hello Joe!");
 
@@ -221,7 +283,7 @@ fn literal_parser()
 }
 
 #[test]
-fn pair_combinator()
+fn test_pair_combinator()
 {
     // recall that we are actually trying to parse XML
     let tag_opener = pair(match_literal("<"), identifier);
@@ -270,23 +332,31 @@ fn test_zero_or_more_combinator()
     assert_eq!(Ok(("", vec![])), parser.parse(""));
 }
 
-
-
-// parser which can parse just the letter 'a'
-fn the_letter_a(input: &str) -> Result<(&str, ()), &str>
+#[test]
+fn test_predicate_combinator() 
 {
-    match input.chars().next()
-    {
-        Some('a') => Ok((&input['a'.len_utf8()..], ())),
-        _ => Err(input),
-    }
+    let parser = pred(any_char, |c| *c == 'o');
+    assert_eq!(Ok(("mg", 'o')), parser.parse("omg")); // get the 'o' from omg
+    assert_eq!(Err("lol"), parser.parse("lol"));
 }
 
+// test quoted string parser 
+#[test]
+fn test_quoted_string_parser()
+{
+    assert_eq!(
+        Ok(("", "Hello Joe!".to_string())),
+        quoted_string().parse("\"Hello Joe!\"")
+    );
+}
+
+
+// ======== MAIN ======== //
 fn main()
 {
-    let input = "aaab";
-    let res = the_letter_a(input);
+    let input = "hahaha";
+    let res = one_or_more(match_literal("ha"));
+
     println!("Input : {}", input);
-    //println!("First call to the_letter_a()");
-    println!("{:?}", res);
+    //println!("{:?}", res);
 }
