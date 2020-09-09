@@ -260,6 +260,27 @@ fn attributes<'a>() -> impl Parser<'a, Vec<(String, String)>>
 }
 
 
+// Starting element (or opening tag)
+fn element_start<'a>() -> impl Parser<'a, (String, Vec<(String, String)>)>
+{
+    return right(match_literal("<"), pair(identifier, attributes()));
+}
+
+// A complete element (with closing tag)
+// TODO : this results in an extremely complicated parse result
+//fn single_element<'a>() -> impl Parser<'a, Element>
+//{
+//    return map(
+//        left(element_start(), match_literal("/>")),
+//        | (name, attributes) | Element {
+//            name,
+//            attributes,
+//            children: vec![],
+//        }
+//    );
+//}
+
+
 // ================ TESTS ================ //
 
 #[test]
@@ -368,6 +389,7 @@ fn test_quoted_string_parser()
     );
 }
 
+// test we can parse a single attribute
 #[test] 
 fn attribute_parser()
 {
@@ -380,6 +402,21 @@ fn attribute_parser()
               attributes().parse(" one=\"1\" two=\"2\"")
           );
 }
+
+// test we can parse a single element
+//#[test]
+//fn single_element_parser()
+//{
+//    assert_eq!(
+//        Ok(("", Element{
+//            name: "div".to_string(),
+//            attributes: vec![("class".to_string(), "float".to_string())],
+//            children: vec![]
+//            }
+//        )),
+//        single_element().parse("<div class=\"float\"/>")
+//    );
+//}
 
 
 // ======== MAIN ======== //
