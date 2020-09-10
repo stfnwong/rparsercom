@@ -2,6 +2,7 @@
  * Rust parser combinator 
  * From here (https://bodil.lol/parser-combinators/)
  */
+#![type_length_limit="1137931"]
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Element 
@@ -103,6 +104,7 @@ where
 
 /*
  * left combinator
+ * Keep only the left side of a combinator pair
  */
 fn left<'a, P1, P2, R1, R2>(parser1: P1, parser2: P2) -> impl Parser<'a, R1>
 where
@@ -114,6 +116,7 @@ where
 
 /*
  * right combinator
+ * Keep only the right side of a combinator pair
  */
 fn right<'a, P1, P2, R1, R2>(parser1: P1, parser2: P2) -> impl Parser<'a, R2>
 where
@@ -241,6 +244,42 @@ fn quoted_string<'a>() -> impl Parser<'a, String>
     )
 }
 
+// ======== ATTRIBUTES ======== //
+
+// This is now quite easy since we have a pair() combinator for parsing 
+// a tuple of values which we can combine with an identifier parser.
+fn attribute_pair<'a>() -> impl Parser<'a, (String, String)>
+{
+    return pair(identifier, right(match_literal("="), quoted_string()));
+}
+
+// combine the above with zero_or_more to build a vector of attributes 
+fn attributes<'a>() -> impl Parser<'a, Vec<(String, String)>>
+{
+    return zero_or_more(right(one_or_more_space(), attribute_pair()));
+}
+
+
+// Starting element (or opening tag)
+fn element_start<'a>() -> impl Parser<'a, (String, Vec<(String, String)>)>
+{
+    return right(match_literal("<"), pair(identifier, attributes()));
+}
+
+// A complete element (with closing tag)
+// TODO : this results in an extremely complicated parse result
+//fn single_element<'a>() -> impl Parser<'a, Element>
+//{
+//    return map(
+//        left(element_start(), match_literal("/>")),
+//        | (name, attributes) | Element {
+//            name,
+//            attributes,
+//            children: vec![],
+//        }
+//    );
+//}
+
 
 // ================ TESTS ================ //
 
@@ -349,6 +388,35 @@ fn test_quoted_string_parser()
         quoted_string().parse("\"Hello Joe!\"")
     );
 }
+
+// test we can parse a single attribute
+#[test] 
+fn attribute_parser()
+{
+    assert_eq!(Ok(("",
+                  vec![
+                      ("one".to_string(), "1".to_string()),
+                      ("two".to_string(), "2".to_string())
+                  ]
+              )),
+              attributes().parse(" one=\"1\" two=\"2\"")
+          );
+}
+
+// test we can parse a single element
+//#[test]
+//fn single_element_parser()
+//{
+//    assert_eq!(
+//        Ok(("", Element{
+//            name: "div".to_string(),
+//            attributes: vec![("class".to_string(), "float".to_string())],
+//            children: vec![]
+//            }
+//        )),
+//        single_element().parse("<div class=\"float\"/>")
+//    );
+//}
 
 
 // ======== MAIN ======== //
